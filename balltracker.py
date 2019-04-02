@@ -46,10 +46,6 @@ def findball(que, n, kernel, k):
   img_diff = que.fgdifferential()
   img_diff = cv2.morphologyEx(img_diff, cv2.MORPH_CLOSE, kernel)
   circles = cv2.HoughCircles(img_diff, cv2.HOUGH_GRADIENT, 1, 10, param1=1, param2=2, minRadius=1, maxRadius=5)
-  if circles is None:
-    # cv2.imshow('no circle origin %d' % k, img)
-    print(k)
-    return None
   circles = circles[0, :, :-1].astype(np.uint)
   candidates = [[] for q in range(n)]
   if len(circles) < n:
@@ -76,7 +72,8 @@ if __name__ == '__main__':
     que.enqueue(img)
     if que.isFull():
       findball(que, n, kernel, k)
-    k += 1
+      k += 1
+      print(k)
     # terminate
     if cv2.waitKey(50) == 27:
       break
