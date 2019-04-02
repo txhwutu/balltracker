@@ -46,9 +46,9 @@ class ImgQueue:
 
 last1 = np.array([583, 336])
 last2 = np.array([582, 318])
+t = 40
 
-
-def cluster(kmeans, circles, est):
+def cluster(kmeans, n, circles, est):
   kmeans.fit(circles)
   # for circle in circles:
   #   cv2.circle(img, (candidate[0], candidate[1]), 3, (0, 0, 255), -1)
@@ -58,25 +58,42 @@ def cluster(kmeans, circles, est):
   clt = sorted(clt, key=lambda x: np.linalg.norm(np.mean(np.array(x), axis=0) - est))
   ball = sorted(clt[0], key=lambda x: np.linalg.norm(x - est))
 
-def findball(que, kernel, kmeans, k):
-  global last1, last2
+
+def findball(que, n, kernel, kmeans, k):
+  global last1, last2, t
   img = np.copy(que.items[que.mid])
   img_diff = que.fgdifferential()
   img_diff = cv2.morphologyEx(img_diff, cv2.MORPH_CLOSE, kernel)
   circles = cv2.HoughCircles(img_diff, cv2.HOUGH_GRADIENT, 1, 10, param1=1, param2=2, minRadius=1, maxRadius=5)
   circles = circles[0, :, :-1].astype(np.int)
-
-  candidates = [c for c in circles]
+  circles = np.array([pos for pos in circles if pos[1] > 95])
+  kmeans.fit(circles)
+  # for circle in circles:
+  #   cv2.circle(img, (candidate[0], candidate[1]), 3, (0, 0, 255), -1)
+  candidates = [[] for q in range(n)]
+  for p in range(len(kmeans.labels_)):
+    candidates[kmeans.labels_[p]].append(circles[p])
   est = last2 - last1 + last2 + 5
-  r = np.linalg.norm(last1 - last2) + 40
-  cds = [c for c in candidates if np.linalg.norm(c - last2) <= r]
+  r = np.linalg.norm(last1 - last2) + t
+  cds = [c for c in candidates if np.linalg.norm(np.mean(np.array(c), axis=0) - last2) <= r]
+
   if len(cds) == 0:
     cv2.circle(img, (est[0], est[1]), 3, (0, 0, 255), -1)
     last1, last2 = last2, est
   else:
-    cds = sorted(cds, key=lambda x: np.linalg.norm(x - est))
-    cv2.circle(img, (cds[0][0], cds[0][1]), 3, (0, 0, 255), -1)
-    last1, last2 = last2, cds[0]
+    one = [c[0] for c in cds if len(c) == 1]
+    one = sorted(one, key=lambda x: np.linalg.norm(x - last2))
+    if len(one) > 0:
+      cv2.circle(img, (one[0][0], one[0][1]), 3, (0, 0, 255), -1)
+      last1, last2 = last2, one[0]
+      t = 40
+    else:
+      t = 200
+      cds = sorted(cds, key=lambda x: min([np.linalg.norm(p - last2) for p in x]))
+      cds = sorted(cds[0], key=lambda x: np.linalg.norm(x - last2))
+      m = len(cds) // 2
+      cv2.circle(img, (cds[0][0], cds[0][1]), 3, (0, 0, 255), -1)
+      last1, last2 = last2, cds[0]
   cv2.putText(img, 'frame%d' % k, (10, 50), font, 1, (255, 255, 0), 2)
   cv2.imshow('tracking', img)
 
@@ -94,7 +111,7 @@ if __name__ == '__main__':
     que.enqueue(img)
     if que.isFull():
       print('processing frame %d' % k)
-      findball(que, kernel, kmeans, k)
+      findball(que, n, kernel, kmeans, k)
       k += 1
 
     if cv2.waitKey(50) == 27:
