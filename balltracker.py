@@ -1,6 +1,9 @@
 import cv2, random, os
 import numpy as np
 from sklearn.cluster import KMeans
+from time import sleep
+
+font = cv2.FONT_HERSHEY_SIMPLEX
 
 
 class ImgQueue:
@@ -41,22 +44,41 @@ class ImgQueue:
     return foreground
 
 
-def findball(que, n, kernel, k):
+last1 = np.array([583, 336])
+last2 = np.array([582, 318])
+
+
+def cluster(kmeans, circles, est):
+  kmeans.fit(circles)
+  # for circle in circles:
+  #   cv2.circle(img, (candidate[0], candidate[1]), 3, (0, 0, 255), -1)
+  clt = [[] for q in range(n)]
+  for p in range(len(kmeans.labels_)):
+    clt[kmeans.labels_[p]].append(circles[p])
+  clt = sorted(clt, key=lambda x: np.linalg.norm(np.mean(np.array(x), axis=0) - est))
+  ball = sorted(clt[0], key=lambda x: np.linalg.norm(x - est))
+
+def findball(que, kernel, kmeans, k):
+  global last1, last2
   img = np.copy(que.items[que.mid])
   img_diff = que.fgdifferential()
   img_diff = cv2.morphologyEx(img_diff, cv2.MORPH_CLOSE, kernel)
   circles = cv2.HoughCircles(img_diff, cv2.HOUGH_GRADIENT, 1, 10, param1=1, param2=2, minRadius=1, maxRadius=5)
-  circles = circles[0, :, :-1].astype(np.uint)
-  candidates = [[] for q in range(n)]
-  if len(circles) < n:
-    for c in circles:
-      cv2.circle(img, (c[0], c[1]), 3, (0,0,255), -1)
-    cv2.imshow('less circle %d' % k, img)
-    return None
-  kmeans.fit(circles)
-  for p in range(len(kmeans.labels_)):
-    candidates[kmeans.labels_[p]].append(circles[p])
-  return candidates
+  circles = circles[0, :, :-1].astype(np.int)
+
+  candidates = [c for c in circles]
+  est = last2 - last1 + last2 + 5
+  r = np.linalg.norm(last1 - last2) + 40
+  cds = [c for c in candidates if np.linalg.norm(c - last2) <= r]
+  if len(cds) == 0:
+    cv2.circle(img, (est[0], est[1]), 3, (0, 0, 255), -1)
+    last1, last2 = last2, est
+  else:
+    cds = sorted(cds, key=lambda x: np.linalg.norm(x - est))
+    cv2.circle(img, (cds[0][0], cds[0][1]), 3, (0, 0, 255), -1)
+    last1, last2 = last2, cds[0]
+  cv2.putText(img, 'frame%d' % k, (10, 50), font, 1, (255, 255, 0), 2)
+  cv2.imshow('tracking', img)
 
 
 if __name__ == '__main__':
@@ -67,14 +89,14 @@ if __name__ == '__main__':
   kmeans = KMeans(n_clusters=n, random_state=0)
   frames = os.listdir('img')
   k = 5
-  for f in range(0, min(50000, len(frames))):
+  for f in range(len(frames)):
     img = cv2.imread('img/%s' % frames[f])
     que.enqueue(img)
     if que.isFull():
-      findball(que, n, kernel, k)
+      print('processing frame %d' % k)
+      findball(que, kernel, kmeans, k)
       k += 1
-      print(k)
-    # terminate
+
     if cv2.waitKey(50) == 27:
       break
   cv2.destroyAllWindows()
